@@ -11,6 +11,75 @@ optparser.add_option("-d", "--delta", dest="delta", default=0.0005, type="float"
 
 (opts, _) = optparser.parse_args()
 
+
+
+"""
+
+MODEL 2
+
+"""
+def Model2(bitext, translation_probs):
+  def InitAlignmentProbs():
+    alignment_probs = {} 
+    for f_sent, e_sent in bitext:
+      l_e = len(e_sent)
+      l_f = len(f_sent)
+      for j in range(l_e):
+        for i in range(l_f):
+          alignment_probs[(i, j, l_e, l_f)] = 1.0 / (l_f + 1)
+    return alignment_probs
+
+  def SingleIteration(translation_probs, alignment_probs):
+    # initialize
+    count = defaultdict(float) 
+    total = defaultdict(float)
+    count_a = defaultdict(float)
+    total_a = defaultdict(float)
+
+    for f_sent, e_sent in bitext:
+      l_e = len(e_sent)
+      l_f = len(f_sent)
+      # compute normalization
+      sum_total = {}
+      for j, e_word in enumerate(e_sent):
+        sum_total[e_word] = 0.0
+        for i, f_word in enumerate(f_sent):
+          sum_total[e_word] += translation_probs[(f_word, e_word)]*alignment_probs[(i, j, l_e, l_f)]
+
+      # collect counts  
+      for j, e_word in enumerate(e_sent):
+        for i, f_word in enumerate(f_sent):
+          c =  translation_probs[(f_word, e_word)] * alignment_probs[(i, j, l_e, l_f)] / sum_total[e_word] 
+          count[(f_word, e_word)] += c
+          total[f_word] += c
+          count_a[(i, j, l_e, l_f)] += c
+          total_a[(j, l_e, l_f)] += c
+
+    # estimate probabilities
+    delta = 0.0
+    for f_word, e_word in count.iterkeys():
+      old_value = translation_probs[(f_word, e_word)]
+      new_value = count[(f_word, e_word)] / total[f_word]
+      translation_probs[(f_word, e_word)] = new_value
+      delta += abs(new_value - old_value)
+    for i, j, l_e, l_f in count_a.iterkeys():
+      alignment_probs[(i, j, l_e, l_f)] = count_a[(i, j, l_e, l_f)] / total_a[(j, l_e, l_f)]
+
+    return translation_probs, alignment_probs, delta/len(count) 
+
+  
+  alignment_probs = InitAlignmentProbs()
+  for i in range(10):
+    translation_probs, alignment_probs, delta = SingleIteration(translation_probs, alignment_probs)
+    sys.stderr.write( str(delta) + "\n")
+    if delta <= opts.delta:
+      break
+  return translation_probs, alignment_probs
+"""
+
+MODEL 1
+
+"""
 def Model1(bitext):
   def MakeUniformProbs():
     alignments = defaultdict(float) # key (f, e), value - alignment prob
@@ -30,28 +99,31 @@ def Model1(bitext):
       # compute normalization
       sum_total = {}
       for e_word in e_sent:
-        sum_total[e_word] = 0
+        sum_total[e_word] = 0.0
         for f_word in f_sent:
           sum_total[e_word] += alignments[(f_word, e_word)]
       # collect counts  
       for e_word in e_sent:
         for f_word in f_sent:
-          count[(f_word, e_word)] += alignments[(f_word, e_word)] / sum_total[e_word]
-          total[f_word] += alignments[(f_word, e_word)] / sum_total[e_word]
+          c = alignments[(f_word, e_word)] / sum_total[e_word]
+          count[(f_word, e_word)] += c
+          total[f_word] += c
     # estimate probabilities
-    new_alignments = defaultdict(float)
     delta = 0.0
     for f_word, e_word in count.iterkeys():
-      new_alignments[(f_word, e_word)] = count[(f_word, e_word)]/total[f_word]
-      delta += abs(new_alignments[(f_word, e_word)] - alignments[(f_word, e_word)])
-    return new_alignments, delta/len(new_alignments) 
+      old_value = alignments[(f_word, e_word)]
+      new_value = count[(f_word, e_word)]/total[f_word]
+      alignments[(f_word, e_word)] = new_value
+      delta += abs(new_value - old_value)
+    return alignments, delta/len(count) 
 
   alignments = MakeUniformProbs()
-  for i in range(10):
+  for i in range(3):
     alignments, delta = SingleIteration(alignments)
     sys.stderr.write( str(delta) + "\n")
     if delta <= opts.delta:
-      return alignments
+      break
+  return alignments
 
 
 def Dice(bitext):
@@ -84,9 +156,12 @@ def PrintOutput(bitext, alignment_probs):
   
 def main():
   bitext = ParseInput()
-  #alignment_probs = Dice (bitext)
-  alignment_probs = Model1(bitext)
-  PrintOutput(bitext, alignment_probs)
+  #translation_probs = Dice (bitext)
+  sys.stderr.write( "Model 1\n")
+  translation_probs = Model1(bitext)
+  sys.stderr.write( "Model 2\n")
+  translation_probs, alignment_probs  = Model2(bitext, translation_probs)
+  PrintOutput(bitext, translation_probs)
 
 if __name__ == '__main__':
   main()
