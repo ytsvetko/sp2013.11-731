@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import optparse
 import sys
+import pickle
 from collections import defaultdict
 
 optparser = optparse.OptionParser()
@@ -8,10 +9,23 @@ optparser.add_option("-b", "--bitext", dest="bitext", default="data/dev-test-tra
 optparser.add_option("-t", "--threshold", dest="threshold", default=0.2, type="float", help="Threshold for aligning with Dice's coefficient (default=0.5)")
 optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to use for training and alignment")
 optparser.add_option("-d", "--delta", dest="delta", default=0.0005, type="float", help="EM stopping condition")
+optparser.add_option("-l", "--load_from_files", dest="load_from_files", default=0, type="int", help="Load from file instead of computing the probabilities")
 
 (opts, _) = optparser.parse_args()
 
+"""
 
+Symmetrize
+
+"""
+def Symmetrize(translation_probs, translation_probs_invert):
+  for (f,e), prob_invert in translation_probs_invert.iteritems():
+    prob = translation_probs[(f,e)]
+    if prob >= opts.threshold and prob_invert >= opts.threshold:
+      translation_probs[(f,e)] = 1 
+    else:
+      translation_probs[(f,e)] = 0 
+  return translation_probs
 
 """
 
@@ -69,7 +83,7 @@ def Model2(bitext, translation_probs):
 
   
   alignment_probs = InitAlignmentProbs()
-  for i in range(10):
+  for i in range(7):
     translation_probs, alignment_probs, delta = SingleIteration(translation_probs, alignment_probs)
     sys.stderr.write( str(delta) + "\n")
     if delta <= opts.delta:
@@ -154,13 +168,45 @@ def PrintOutput(bitext, alignment_probs):
           sys.stdout.write("%i-%i " % (i,j))
     sys.stdout.write("\n")
   
+def InvertBitext(bitext):
+  return [(e,f) for (f,e) in bitext]
+
+def InvertTranslationProbs(translation_probs_invert):
+  translation_probs = defaultdict(float)
+  for (f,e), prob in translation_probs_invert.iteritems():
+    translation_probs[(e,f)] = prob
+  return translation_probs
+
+def SaveToFile(translation_probs, filename):
+  f = open(filename, "w")
+  pickle.dump(translation_probs, f)
+
+def LoadFromFile(filename):
+  return pickle.load(open(filename))
+  
 def main():
   bitext = ParseInput()
   #translation_probs = Dice (bitext)
-  sys.stderr.write( "Model 1\n")
-  translation_probs = Model1(bitext)
-  sys.stderr.write( "Model 2\n")
-  translation_probs, alignment_probs  = Model2(bitext, translation_probs)
+
+  if opts.load_from_files == 1:
+    translation_probs = LoadFromFile("translation_probs")
+    translation_probs_invert = LoadFromFile("translation_probs_invert")
+  else:
+    sys.stderr.write( "Model 1\n")
+    translation_probs = Model1(bitext)
+    sys.stderr.write( "Model 2\n")
+    translation_probs, alignment_probs  = Model2(bitext, translation_probs)
+    SaveToFile(translation_probs, "translation_probs")
+    del alignment_probs
+    invert_bitext = InvertBitext(bitext)
+    sys.stderr.write( "Model 1 invert\n")
+    translation_probs_invert = Model1(invert_bitext)
+    sys.stderr.write( "Model 2 invert\n")
+    translation_probs_invert, alignment_probs  = Model2(invert_bitext, translation_probs_invert)
+    del alignment_probs
+    translation_probs_invert = InvertTranslationProbs(translation_probs_invert)
+    SaveToFile(translation_probs_invert, "translation_probs_invert")
+  translation_probs = Symmetrize(translation_probs, translation_probs_invert)
   PrintOutput(bitext, translation_probs)
 
 if __name__ == '__main__':
