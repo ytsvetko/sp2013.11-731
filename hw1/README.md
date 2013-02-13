@@ -1,3 +1,14 @@
+./align file contains:
+
+Model1 method - implementation of IBM model 1
+
+Model2  method - implementation of IBM model 2
+
+Symmetrize method  - implementation of intersection
+
+
+
+--------------------------------------------------------------
 There are three Python programs here (`-h` for usage):
 
  - `./align` aligns words using Dice's coefficient.
