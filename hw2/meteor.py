@@ -5,6 +5,20 @@ import collections
  
 import  string
 
+def distance(hyp, ref):
+  inter_set = set(hyp).intersection(ref)
+  hyp = [w for w in hyp if w in inter_set]
+  ref = [w for w in ref if w in inter_set]
+  hyp_dict = collections.defaultdict(list)
+  for ind, word in enumerate(hyp):
+    hyp_dict[word].append(ind)
+  total_dist = 0
+  for ind, w in enumerate(ref):
+    dist = min([abs(ind-i) for i in hyp_dict[w]])
+    total_dist += dist**2
+  if len(inter_set) == 0:
+    return 0.0
+  return total_dist**0.5 / len(inter_set)
 
 def count_chunks(hyp, ref):
   chunks = 0
@@ -12,12 +26,15 @@ def count_chunks(hyp, ref):
 
   hyp_dict = collections.defaultdict(list)
   for ind, word in enumerate(hyp):
+    #syn = synonyms.get(word, [word])
+    #for s in syn:
+    #  hyp_dict[s].append(ind)
     hyp_dict[word].append(ind)
 
   prev_hyp_ind = -2
   curr_chunk = []
   for r in ref:
-    if  r in hyp_dict:
+    if  r in hyp_dict: 
       if len(curr_chunk) > 0:
         if prev_hyp_ind+1 in hyp_dict[r]:
           curr_chunk.append(r)
@@ -42,8 +59,8 @@ def evaluate(hyp, ref, synonyms):
   if mapped_unigrams == 0: 
     p = 1
   else: 
-    p = 0.6 * (1.0*chunks/mapped_unigrams)**0.2 # weights from multieval
-  return f_mean(hyp, ref, synonyms) * (1 - p)
+    p = 0.55 * (1.0*chunks/mapped_unigrams)**0.2
+  return f_mean(hyp, ref, synonyms) * (1 - p) * (1 - 0.1*distance(hyp, ref))
 
 def synonym_intersection(hyp, ref, synonyms):
   r_set = set(ref)
@@ -83,6 +100,12 @@ def load_synonyms(filename):
     for word in synset:
       synonyms[word].update(synset)
   return synonyms
+
+def load_function_words(filename):
+  function_words = set()
+  for line in open(filename):
+    function_words.add(line.strip().lower())
+  return function_words
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate translation hypotheses.')
