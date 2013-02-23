@@ -2,16 +2,15 @@
 import argparse # optparse is deprecated
 from itertools import islice # slicing for iterators
  
- 
 def evaluate(hyp, ref):
   h_set = set(hyp)
   r_set = set(ref)
   match = h_set.intersection(r_set)
-  precision =  0.95*len(match)/float(len(hyp))
+  precision =  len(match)/float(len(hyp))
   recall =  len(match)/float(len(ref))
   if precision+recall == 0 :
     return 0
-  return 2*precision*recall/(precision+recall)
+  return precision*recall/(0.9*precision+recall)
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate translation hypotheses.')
