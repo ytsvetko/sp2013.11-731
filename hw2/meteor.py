@@ -3,6 +3,9 @@ import argparse # optparse is deprecated
 from itertools import islice # slicing for iterators
 import collections
  
+import  string
+
+
 def count_chunks(hyp, ref):
   chunks = 0
   mapped_unigrams = 0
@@ -32,7 +35,7 @@ def count_chunks(hyp, ref):
       mapped_unigrams += len(curr_chunk)
       prev_hyp_ind = -2
       curr_chunk = []    
-  return  chunks, mapped_unigrams     
+  return  chunks, mapped_unigrams  
    
 def evaluate(hyp, ref):
   chunks, mapped_unigrams = count_chunks(hyp, ref)
@@ -45,12 +48,22 @@ def evaluate(hyp, ref):
 def f_mean(hyp, ref):
   h_set = set(hyp)
   r_set = set(ref)
+  if len(hyp) == 0 and len(ref) == 0:
+    return 1
+  if len(hyp) == 0 or len(ref) == 0:
+    return 0
   match = h_set.intersection(r_set)
   precision =  len(match)/float(len(hyp)) 
   recall =  len(match)/float(len(ref))
   if precision+recall == 0 :
     return 0
   return precision*recall/(0.85*precision+0.25*recall)# weights from multieval
+
+def remove_punctuation(s):
+  return ''.join([i for i in s if i not in string.punctuation])
+
+def preprocess(s) :
+  return remove_punctuation(s.strip().lower())
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate translation hypotheses.')
@@ -66,7 +79,7 @@ def main():
     def sentences():
         with open(opts.input) as f:
             for pair in f:
-                yield [sentence.lower().strip().split() for sentence in pair.split(' ||| ')]
+                yield [preprocess(sentence).split() for sentence in pair.split(' ||| ')]
  
     # note: the -n option does not work in the original code
     for h1, h2, ref in islice(sentences(), opts.num_sentences):
