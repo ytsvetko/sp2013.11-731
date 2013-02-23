@@ -1,4 +1,9 @@
-experiment 1 - METEOR, lowercase
+experiment 1 - harmonic mean, lowercase
+experiment 2 - WER
+experiment 3 - punctuation
+experiment 4 - meteor
+experiment 5 - wordnet synonyms 
+experiment 6 - matches edit distance
 
 There are three Python programs here (`-h` for usage):
 
