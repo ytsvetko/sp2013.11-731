@@ -37,24 +37,33 @@ def count_chunks(hyp, ref):
       curr_chunk = []    
   return  chunks, mapped_unigrams  
    
-def evaluate(hyp, ref):
+def evaluate(hyp, ref, synonyms):
   chunks, mapped_unigrams = count_chunks(hyp, ref)
   if mapped_unigrams == 0: 
     p = 1
   else: 
     p = 0.6 * (1.0*chunks/mapped_unigrams)**0.2 # weights from multieval
-  return f_mean(hyp, ref) * (1 - p)
+  return f_mean(hyp, ref, synonyms) * (1 - p)
 
-def f_mean(hyp, ref):
-  h_set = set(hyp)
+def synonym_intersection(hyp, ref, synonyms):
   r_set = set(ref)
+  count = 0
+  for h in set(hyp): 
+    syn = synonyms.get(h, [h])
+    for s in syn:
+      if s in r_set:
+        count += 1
+        break
+  return count
+ 
+def f_mean(hyp, ref, synonyms):
   if len(hyp) == 0 and len(ref) == 0:
     return 1
   if len(hyp) == 0 or len(ref) == 0:
     return 0
-  match = h_set.intersection(r_set)
-  precision =  len(match)/float(len(hyp)) 
-  recall =  len(match)/float(len(ref))
+  match = synonym_intersection(hyp, ref, synonyms)
+  precision =  match/float(len(hyp)) 
+  recall =  match/float(len(ref))
   if precision+recall == 0 :
     return 0
   return precision*recall/(0.85*precision+0.25*recall)# weights from multieval
@@ -64,6 +73,16 @@ def remove_punctuation(s):
 
 def preprocess(s) :
   return remove_punctuation(s.strip().lower())
+
+def load_synonyms(filename):
+  synonyms = collections.defaultdict(set)
+  for line in open(filename):
+    synset = line.split('\t')
+    if len(synset)<2:
+      continue
+    for word in synset:
+      synonyms[word].update(synset)
+  return synonyms
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate translation hypotheses.')
@@ -81,10 +100,11 @@ def main():
             for pair in f:
                 yield [preprocess(sentence).split() for sentence in pair.split(' ||| ')]
  
+    synonyms = load_synonyms('data/wordnet_synonyms.en')
     # note: the -n option does not work in the original code
     for h1, h2, ref in islice(sentences(), opts.num_sentences):
-        h1_match = evaluate(h1, ref)
-        h2_match = evaluate(h2, ref)
+        h1_match = evaluate(h1, ref, synonyms)
+        h2_match = evaluate(h2, ref, synonyms)
         print(-1 if h1_match > h2_match else # \begin{cases}
                 (0 if h1_match == h2_match
                     else 1)) # \end{cases}
