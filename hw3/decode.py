@@ -121,25 +121,28 @@ class LineDecoder:
         cost[(start, end)] = (tm_cost, lm_cost, en_phrase)
     return cost
 
-  def DecodeLine(self, f):
+  def DecodeLine(self, f, stack_size, max_logprob):
     est_cost_table = self.CalcCostTable(f)
 
     def HypCost(kv):
       (bitmask, _), h = kv
       logprob = h.logprob
-      #return logprob
       for start, end in bitmask.GetZeroSpans():
         tm_cost, lm_cost, _ = est_cost_table[(start, end)]
-        logprob += tm_cost + lm_cost
+        logprob += tm_cost #+ lm_cost
+      if logprob < max_logprob:
+        return -inf
       return logprob
 
     stacks = [{} for _ in f] + [{}]
     stacks[0][(Bitmask(len(f), 0, 0, 0), self.lm.begin())] = self.initial_hypothesis
     #print "Sentence length", len(f)
     for current_stack_num, stack in enumerate(stacks[:-1]):
+      if current_stack_num > 0:
+        stacks[current_stack_num-1] = {}
       #print "Processing stack", current_stack_num
       # extend the top s hypotheses in the current stack
-      for (bitmask, lm_state), h in heapq.nlargest(opts.s, stack.iteritems(), key=HypCost): # prune
+      for (bitmask, lm_state), h in heapq.nlargest(stack_size, stack.iteritems(), key=HypCost): # prune
         for i,j,stack_num in bitmask.iterspans():
           #print i,j,stack_num 
           """
@@ -157,23 +160,38 @@ class LineDecoder:
                 logprob += word_logprob
               logprob += self.lm.end(lm_state) if j == len(f) else 0.0                        
               key = (new_bitmask, lm_state)
+              if logprob < max_logprob : 
+                continue
               if key not in stacks[stack_num] or stacks[stack_num][key].logprob < logprob: # second case is recombination
                 new_hypothesis = hypothesis(logprob, lm_state, h, phrase)
                 stacks[stack_num][key] = new_hypothesis
 
     # find best translation by looking at the best scoring hypothesis
     # on the last stack
-    winner = max(stacks[-1].itervalues(), key=lambda h: h.logprob)
-    return extract_english_recursive(winner)
+    if len(stacks[-1]) > 0:
+      winner = max(stacks[-1].itervalues(), key=lambda h: h.logprob)
+    else:
+      return "", -inf
+    return extract_english_recursive(winner), winner.logprob
 
 def main():
   tm = models.TM(opts.tm, sys.maxint)
   lm = models.LM(opts.lm)
   sys.stderr.write('Decoding %s...\n' % (opts.input,))
   input_sents = [tuple(line.strip().split()) for line in open(opts.input).readlines()[:opts.num_sents]]
+  
   for sent_num, f in enumerate(input_sents):
-    sys.stderr.write("SentNum: {}\n".format(sent_num))
-    print LineDecoder(tm, lm).DecodeLine(f)
+    max_logprob = -inf
+    curr_stack_size = 100
+    curr_translation = ""
+    while   curr_stack_size <= opts.s:
+      sys.stderr.write("SentNum: {}, StackSize: {}\n".format(sent_num, curr_stack_size))
+      translation, logprob = LineDecoder(tm, lm).DecodeLine(f, curr_stack_size, max_logprob)
+      if logprob > max_logprob:
+        curr_translation = translation
+        max_logprob = logprob
+      curr_stack_size = curr_stack_size*10
+    print curr_translation
 
 if __name__ == "__main__":
   main()
